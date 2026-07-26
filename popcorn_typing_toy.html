@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Popcorn - Typing Speed Toy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        .mono {
+            font-family: 'Space Mono', monospace;
+        }
+        canvas {
+            display: block;
+        }
+        /* Custom glowing keypress feedback ring */
+        @keyframes keyPulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            100% { transform: scale(1.15); opacity: 0; }
+        }
+        .key-active {
+            animation: keyPulse 0.3s cubic-bezier(0, 0, 0.2, 1) forwards;
+        }
+    </style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 h-screen w-screen overflow-hidden flex flex-col justify-between relative selection:bg-amber-500 selection:text-black">
+
+    <!-- Top Header / Instructions -->
+    <header class="w-full pt-6 pb-2 px-6 flex flex-col items-center justify-center z-20 text-center pointer-events-none">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900/80 border border-neutral-800/80 backdrop-blur-md mb-2 shadow-lg">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            <span class="text-xs font-semibold tracking-wider uppercase text-amber-300">Typing Physics Simulator</span>
+        </div>
+        <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-white mb-1 drop-shadow-md">
+            Popcorn
+        </h1>
+        <p class="text-sm md:text-base text-neutral-400 font-light max-w-md">
+            Press any key. Mash to heat up. Stop to cool down.
+        </p>
+    </header>
+
+    <!-- Canvas Container -->
+    <main class="absolute inset-0 z-0 flex items-center justify-center">
+        <canvas id="popcornCanvas" class="w-full h-full"></canvas>
+    </main>
+
+    <!-- Bottom HUD Controls & Heat Thermometer -->
+    <footer class="w-full pb-8 pt-4 px-6 z-20 flex flex-col md:flex-row items-center justify-between gap-6 max-w-5xl mx-auto pointer-events-none">
+        
+        <!-- Stats Badges -->
+        <div class="flex items-center gap-4 bg-neutral-900/60 backdrop-blur-md px-5 py-3 rounded-2xl border border-neutral-800/60 shadow-xl w-full md:w-auto justify-around md:justify-start">
+            <div class="text-center md:text-left">
+                <span class="text-[10px] uppercase font-bold text-neutral-500 tracking-wider block">Popped</span>
+                <span id="statPopped" class="mono text-2xl font-bold text-amber-200">0</span>
+            </div>
+            <div class="h-8 w-[1px] bg-neutral-800"></div>
+            <div class="text-center md:text-left">
+                <span class="text-[10px] uppercase font-bold text-neutral-500 tracking-wider block">Keys / Sec</span>
+                <span id="statKps" class="mono text-2xl font-bold text-amber-400">0.0</span>
+            </div>
+            <div class="h-8 w-[1px] bg-neutral-800"></div>
+            <div class="text-center md:text-left">
+                <span class="text-[10px] uppercase font-bold text-neutral-500 tracking-wider block">Status</span>
+                <span id="statStatus" class="mono text-sm font-semibold text-neutral-400">Cold</span>
+            </div>
+        </div>
+
+        <!-- Heat Thermometer Gauge -->
+        <div class="flex items-center gap-4 bg-neutral-900/60 backdrop-blur-md px-5 py-3 rounded-2xl border border-neutral-800/60 shadow-xl w-full md:w-80">
+            <div class="flex flex-col flex-1">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.316.492-.63 1.018-.946 1.545-.63 1.053-1.26 2.106-1.89 3.16a1 1 0 001.71 1.026l.32-.533c.478-.797.955-1.593 1.433-2.39.176-.294.348-.582.51-.85a18.27 18.27 0 011.135 1.77c.887 1.533 1.345 3.11 1.345 4.67 0 3.314-2.686 6-6 6s-6-2.686-6-6c0-1.56.458-3.137 1.345-4.67.14-.242.29-.485.443-.728.322-.511.666-1.018 1.01-1.525a1 1 0 00-1.666-1.118c-.378.558-.753 1.111-1.107 1.67-.998 1.572-[1.58] 3.38-[1.58] 5.371 0 4.418 3.582 8 8 8s8-3.582 8-8c0-1.99-.582-3.8-1.58-5.37-.354-.56-.73-1.113-1.108-1.672z" clip-rule="evenodd" />
+                        </svg>
+                        Pan Temp
+                    </span>
+                    <span id="heatValue" class="mono text-xs font-bold text-amber-400">0%</span>
+                </div>
+                <!-- Heat Bar track -->
+                <div class="w-full bg-neutral-950 h-3 rounded-full overflow-hidden p-0.5 border border-neutral-800 relative">
+                    <div id="heatBar" class="h-full w-0% rounded-full transition-all duration-75 bg-gradient-to-r from-amber-600 via-orange-500 to-red-500 shadow-[0_0_12px_rgba(245,158,11,0.6)]"></div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Audio Start Hint Banner (Shows before first keypress/tap) -->
+    <div id="audioStartHint" class="absolute inset-x-0 top-24 mx-auto w-max px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-full text-amber-300 text-xs tracking-wide animate-pulse pointer-events-none z-30 flex items-center gap-2">
+        <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+        </svg>
+        <span>Audio enabled on keypress or tap</span>
+    </div>
+
+    <script>
+        // Web Audio API Synthesizer Context & Nodes
+        let audioCtx = null;
+        let sizzleSource = null;
+        let sizzleGain = null;
+        let sizzleFilter = null;
+        let audioInitialized = false;
+
+        function initAudio() {
+            if (audioInitialized) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                
+                // Create continuous sizzle/frying noise buffer
+                const bufferSize = audioCtx.sampleRate * 2;
+                const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1; // White noise
+                }
+
+                sizzleSource = audioCtx.createBufferSource();
+                sizzleSource.buffer = noiseBuffer;
+                sizzleSource.loop = true;
+
+                // Highpass/Bandpass filter for hot pan sizzle/hiss sound
+                sizzleFilter = audioCtx.createBiquadFilter();
+                sizzleFilter.type = 'bandpass';
+                sizzleFilter.frequency.value = 3200;
+                sizzleFilter.Q.value = 1.2;
+
+                sizzleGain = audioCtx.createGain();
+                sizzleGain.gain.value = 0; // Starts silent
+
+                sizzleSource.connect(sizzleFilter);
+                sizzleFilter.connect(sizzleGain);
+                sizzleGain.connect(audioCtx.destination);
+
+                sizzleSource.start(0);
+                audioInitialized = true;
+
+                const hintEl = document.getElementById('audioStartHint');
+                if (hintEl) hintEl.style.display = 'none';
+            } catch (e) {
+                console.warn("Web Audio API not supported or blocked", e);
+            }
+        }
+
+        // Play procedural pop sound effect
+        function playPopSound(pitchFactor = 1.0, heatLevel = 0) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const now = audioCtx.currentTime;
+
+            // Frequency envelope for popping snap
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            // Pitch variation based on heat and random jitter
+            const baseFreq = 220 + Math.random() * 380 + (heatLevel * 2.5);
+            const targetFreq = 40 + Math.random() * 60;
+            const duration = 0.035 + Math.random() * 0.03;
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(baseFreq * pitchFactor, now);
+            osc.frequency.exponentialRampToValueAtTime(targetFreq, now + duration);
+
+            // Snappy gain decay
+            gain.gain.setValueAtTime(0.8 + Math.random() * 0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            osc.connect(gain);
+
+            // Add short noise click for realistic shell crackle
+            const noiseLen = audioCtx.sampleRate * 0.015;
+            const noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
+            const data = noiseBuf.getChannelData(0);
+            for (let i = 0; i < noiseLen; i++) {
+                data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (noiseLen * 0.3));
+            }
+
+            const noiseNode = audioCtx.createBufferSource();
+            noiseNode.buffer = noiseBuf;
+
+            const noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'highpass';
+            noiseFilter.frequency.value = 1500;
+
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0.35 + Math.random() * 0.2, now);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+
+            noiseNode.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+
+            // Connect both components to main output
+            gain.connect(audioCtx.destination);
+            noiseGain.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + duration + 0.01);
+            noiseNode.start(now);
+            noiseNode.stop(now + 0.02);
+        }
+
+        // Update ambient sizzle audio volume based on pan heat
+        function updateSizzleAudio(heat) {
+            if (!sizzleGain || !audioCtx) return;
+            // Sizzle fades in exponentially around 20% heat up to max volume at 100%
+            const normHeat = Math.max(0, (heat - 15) / 85);
+            const targetGain = Math.pow(normHeat, 2.2) * 0.12; 
+            sizzleGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
+            if (sizzleFilter) {
+                // Brighten filter frequency as heat rises
+                sizzleFilter.frequency.setTargetAtTime(2500 + (normHeat * 2500), audioCtx.currentTime, 0.1);
+            }
+        }
+
+        const canvas = document.getElementById('popcornCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initUnpoppedKernels();
+        });
+
+        // Application State
+        let heat = 0; // 0 to 100
+        let totalPopped = 0;
+        let keypressTimestamps = [];
+        let kps = 0;
+        let autoPopTimer = 0;
+
+        // Particle Collections
+        let particles = [];        // Fluffy popped kernels
+        let rawKernels = [];       // Golden unpopped kernels resting in bottom of pan
+        let steamParticles = [];   // Rising steam wisps at high temp
+        let keyRippleEffects = []; // Visual touch/keypress ripples
+
+        // Pan Geometry Constants
+        function getPanBounds() {
+            const panWidth = Math.min(width * 0.6, 420);
+            const panHeight = panWidth * 0.38;
+            const centerX = width / 2;
+            const centerY = height / 2 + 60;
+            return {
+                x: centerX,
+                y: centerY,
+                radiusX: panWidth / 2,
+                radiusY: panHeight / 2,
+                width: panWidth,
+                height: panHeight,
+                bottomY: centerY + panHeight * 0.25
+            };
+        }
+
+        // Unpopped Golden Kernel resting inside pan
+        class RawKernel {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                const pan = getPanBounds();
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.sqrt(Math.random()) * (pan.radiusX * 0.75);
+                this.x = pan.x + Math.cos(angle) * r;
+                this.y = pan.bottomY + Math.sin(angle) * (pan.radiusY * 0.3) - (Math.random() * 10);
+                this.size = 3.5 + Math.random() * 2.5;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.color = ['#d97706', '#b45309', '#f59e0b', '#78350f'][Math.floor(Math.random() * 4)];
+                this.vibrateOffset = 0;
+            }
+
+            draw(ctx, panHeat) {
+                ctx.save();
+                let vx = 0, vy = 0;
+                if (panHeat > 30) {
+                    const jitter = (panHeat / 100) * 1.8;
+                    vx = (Math.random() - 0.5) * jitter;
+                    vy = (Math.random() - 0.5) * jitter;
+                }
+                ctx.translate(this.x + vx, this.y + vy);
+                ctx.rotate(this.rotation);
+                
+                // Draw kernel ellipse shape
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.size, this.size * 0.65, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Shiny highlight
+                ctx.fillStyle = '#fef08a';
+                ctx.beginPath();
+                ctx.arc(-this.size * 0.3, -this.size * 0.2, this.size * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        // Popped Fluffy Popcorn Piece
+        class PopcornParticle {
+            constructor(startX, startY, heatLevel) {
+                this.x = startX;
+                this.y = startY;
+                
+                // Initial explosive velocity
+                const popPower = 10 + (heatLevel * 0.08) + (Math.random() * 8);
+                const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2; // Upward cone
+                this.vx = Math.cos(angle) * (popPower * 0.6);
+                this.vy = Math.sin(angle) * popPower;
+
+                this.gravity = 0.38 + Math.random() * 0.1;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.vRot = (Math.random() - 0.5) * 0.25;
+
+                // Popcorn Visual Shape generation (3-5 fluffy lobes)
+                this.lobes = [];
+                const lobeCount = 4 + Math.floor(Math.random() * 2);
+                const baseRadius = 6 + Math.random() * 4;
+                for (let i = 0; i < lobeCount; i++) {
+                    const a = (i / lobeCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+                    const r = baseRadius * (0.8 + Math.random() * 0.5);
+                    this.lobes.push({
+                        ox: Math.cos(a) * r * 0.55,
+                        oy: Math.sin(a) * r * 0.55,
+                        r: r,
+                        color: ['#fffbeb', '#fef3c7', '#fde68a', '#ffffff'][Math.floor(Math.random() * 4)]
+                    });
+                }
+                
+                // Golden seed center piece remaining in popcorn
+                this.seedColor = '#d97706';
+
+                // Scale expansion pop effect (scale-up then subtle stretch)
+                this.scale = 0.1;
+                this.targetScale = 0.9 + Math.random() * 0.4;
+                this.scaleSpeed = 0.25;
+
+                this.opacity = 1.0;
+                this.life = 0;
+                this.maxLife = 120 + Math.random() * 80; // frames before fading out fully
+            }
+
+            update() {
+                // Scale animation on pop
+                if (this.scale < this.targetScale) {
+                    this.scale += this.scaleSpeed;
+                    if (this.scale > this.targetScale) this.scale = this.targetScale;
+                }
+
+                // Physics movement
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += this.gravity;
+                this.rotation += this.vRot;
+
+                // Drag
+                this.vx *= 0.99;
+
+                this.life++;
+                if (this.life > this.maxLife - 30) {
+                    this.opacity = Math.max(0, (this.maxLife - this.life) / 30);
+                }
+
+                return this.life < this.maxLife;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.scale(this.scale, this.scale);
+                ctx.globalAlpha = this.opacity;
+
+                // Subtle shadow under popcorn
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+                ctx.beginPath();
+                ctx.arc(2, 3, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw fluffy lobes
+                for (let lobe of this.lobes) {
+                    ctx.fillStyle = lobe.color;
+                    ctx.beginPath();
+                    ctx.arc(lobe.ox, lobe.oy, lobe.r, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Subtle inner shading for volume
+                    ctx.fillStyle = 'rgba(217, 119, 6, 0.08)';
+                    ctx.beginPath();
+                    ctx.arc(lobe.ox + 1, lobe.oy + 1, lobe.r * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Center unpopped kernel remnant detail
+                ctx.fillStyle = this.seedColor;
+                ctx.beginPath();
+                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        // Steam wisps rising from hot pan
+        class SteamParticle {
+            constructor(pan) {
+                this.x = pan.x + (Math.random() - 0.5) * (pan.radiusX * 1.2);
+                this.y = pan.bottomY - 10 + (Math.random() - 0.5) * 20;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = -1.2 - Math.random() * 1.5;
+                this.radius = 8 + Math.random() * 12;
+                this.maxRadius = this.radius + 20 + Math.random() * 15;
+                this.opacity = 0.15 + Math.random() * 0.15;
+                this.maxLife = 50 + Math.random() * 40;
+                this.life = 0;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.radius += (this.maxRadius - this.radius) * 0.03;
+                this.life++;
+                this.opacity = Math.max(0, (1 - (this.life / this.maxLife)) * 0.2);
+                return this.life < this.maxLife;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius);
+                grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+                grad.addColorStop(0.6, 'rgba(255, 230, 200, 0.15)');
+                grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Keypress shockwave visual ripple on canvas
+        class KeyRipple {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.r = 10;
+                this.maxR = 60 + Math.random() * 30;
+                this.opacity = 0.6;
+            }
+            update() {
+                this.r += (this.maxR - this.r) * 0.15;
+                this.opacity -= 0.035;
+                return this.opacity > 0;
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.opacity);
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        function initUnpoppedKernels() {
+            rawKernels = [];
+            for (let i = 0; i < 45; i++) {
+                rawKernels.push(new RawKernel());
+            }
+        }
+        initUnpoppedKernels();
+
+        // Render virtual pan/pot on canvas
+        function drawPan(ctx, pan, heatLevel) {
+            ctx.save();
+
+            // Vibration at high heat
+            let jitterX = 0, jitterY = 0;
+            if (heatLevel > 75) {
+                const j = (heatLevel - 75) / 25 * 2.5;
+                jitterX = (Math.random() - 0.5) * j;
+                jitterY = (Math.random() - 0.5) * j;
+            }
+
+            const cx = pan.x + jitterX;
+            const cy = pan.y + jitterY;
+
+            // 1. Heat Glow Aura behind pan
+            if (heatLevel > 2) {
+                const glowRadius = pan.radiusX * (1.1 + (heatLevel / 100) * 0.4);
+                const glowGrad = ctx.createRadialGradient(cx, cy, pan.radiusX * 0.2, cx, cy, glowRadius);
+                
+                const alpha = Math.min(0.85, (heatLevel / 100) * 0.7);
+                if (heatLevel < 40) {
+                    glowGrad.addColorStop(0, `rgba(245, 158, 11, ${alpha})`); // Warm Amber
+                    glowGrad.addColorStop(0.7, `rgba(217, 119, 6, ${alpha * 0.3})`);
+                } else if (heatLevel < 75) {
+                    glowGrad.addColorStop(0, `rgba(249, 115, 22, ${alpha})`); // Orange
+                    glowGrad.addColorStop(0.6, `rgba(239, 68, 68, ${alpha * 0.4})`);
+                } else {
+                    glowGrad.addColorStop(0, `rgba(254, 240, 138, ${alpha})`); // Hot White/Yellow
+                    glowGrad.addColorStop(0.4, `rgba(249, 115, 22, ${alpha * 0.8})`);
+                    glowGrad.addColorStop(0.8, `rgba(220, 38, 38, ${alpha * 0.3})`);
+                }
+                glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+                ctx.fillStyle = glowGrad;
+                ctx.beginPath();
+                ctx.ellipse(cx, cy + 10, glowRadius, glowRadius * 0.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 2. Pan Handles (Left & Right)
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            
+            // Left Handle
+            ctx.beginPath();
+            ctx.arc(cx - pan.radiusX - 12, cy - 10, 22, Math.PI * 0.4, Math.PI * 1.6, false);
+            ctx.stroke();
+
+            // Right Handle
+            ctx.beginPath();
+            ctx.arc(cx + pan.radiusX + 12, cy - 10, 22, -Math.PI * 0.6, Math.PI * 0.6, false);
+            ctx.stroke();
+
+            // 3. Main Pan Outer Shell (Dark Metallic Vessel)
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + 15, pan.radiusX + 4, pan.radiusY + 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Outer Gradient
+            const bodyGrad = ctx.createLinearGradient(cx - pan.radiusX, cy, cx + pan.radiusX, cy);
+            bodyGrad.addColorStop(0, '#1e293b');
+            bodyGrad.addColorStop(0.5, '#334155');
+            bodyGrad.addColorStop(1, '#0f172a');
+            
+            ctx.fillStyle = bodyGrad;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + 12, pan.radiusX, pan.radiusY, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 4. Pan Inner Basin (Hot Cooking Surface)
+            const basinGrad = ctx.createRadialGradient(cx, cy + 15, 10, cx, cy + 15, pan.radiusX * 0.85);
+            
+            // Heat surface color shifts with heatLevel
+            const heatR = Math.floor(15 + (heatLevel / 100) * 180);
+            const heatG = Math.floor(23 + (heatLevel / 100) * 50);
+            const heatB = Math.floor(42 - (heatLevel / 100) * 30);
+            
+            basinGrad.addColorStop(0, `rgb(${heatR + 40}, ${heatG + 20}, ${heatB})`);
+            basinGrad.addColorStop(0.7, `rgb(${heatR}, ${heatG}, ${heatB})`);
+            basinGrad.addColorStop(1, '#020617');
+
+            ctx.fillStyle = basinGrad;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + 15, pan.radiusX * 0.88, pan.radiusY * 0.82, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Inner Pan Rim Highlight
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, pan.radiusX * 0.95, pan.radiusY * 0.95, 0, Math.PI * 0.05, Math.PI * 0.95);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function triggerPop(count = 1) {
+            const pan = getPanBounds();
+            for (let i = 0; i < count; i++) {
+                // Pick random unpopped kernel position inside pan basin
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.random() * (pan.radiusX * 0.65);
+                const startX = pan.x + Math.cos(angle) * r;
+                const startY = pan.bottomY + Math.sin(angle) * (pan.radiusY * 0.25) - 10;
+
+                particles.push(new PopcornParticle(startX, startY, heat));
+                totalPopped++;
+
+                // Trigger Web Audio pop
+                const pitch = 0.85 + Math.random() * 0.45;
+                playPopSound(pitch, heat);
+            }
+
+            // Temporarily bounce a kernel visually
+            if (rawKernels.length > 0) {
+                const idx = Math.floor(Math.random() * rawKernels.length);
+                rawKernels[idx].reset();
+            }
+        }
+
+        // Keypress / Touch Event Trigger
+        function handleInput(eventPointX, eventPointY) {
+            initAudio();
+
+            const now = performance.now();
+            keypressTimestamps.push(now);
+
+            // Clean timestamps older than 1 second for KPS calculation
+            keypressTimestamps = keypressTimestamps.filter(t => now - t <= 1000);
+            kps = keypressTimestamps.length;
+
+            // Increase Heat - faster mashing yields higher multiplier
+            const kpsBoost = 1 + (kps * 0.22);
+            heat = Math.min(100, heat + (4.2 * kpsBoost));
+
+            // Determine pop count based on heat level bracket
+            let popCount = 1;
+            if (heat >= 35 && heat < 70) {
+                popCount = Math.floor(1 + Math.random() * 2.5); // 1-3 pops
+            } else if (heat >= 70) {
+                popCount = Math.floor(2 + Math.random() * 3.5); // 2-5 pops
+            }
+
+            triggerPop(popCount);
+
+            // Add visual ripple effect
+            if (eventPointX !== undefined && eventPointY !== undefined) {
+                keyRippleEffects.push(new KeyRipple(eventPointX, eventPointY));
+            } else {
+                // Center pan ripple if keyboard input
+                const pan = getPanBounds();
+                keyRippleEffects.push(new KeyRipple(pan.x + (Math.random() - 0.5) * 60, pan.y + (Math.random() - 0.5) * 30));
+            }
+        }
+
+        // Keyboard Listener
+        window.addEventListener('keydown', (e) => {
+            // Ignore key repeats to measure real typing speed
+            if (e.repeat) return;
+            handleInput();
+        });
+
+        // Touch / Click Listener (Mobile & Mouse friendly)
+        window.addEventListener('pointerdown', (e) => {
+            // Ignore if clicking UI controls
+            if (e.target.closest('footer') || e.target.closest('header')) return;
+            handleInput(e.clientX, e.clientY);
+        });
+
+        let lastTime = performance.now();
+
+        function animate(now) {
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            // Clear Canvas
+            ctx.fillStyle = '#09090b';
+            ctx.fillRect(0, 0, width, height);
+
+            // 1. Calculate KPS & Decay Heat
+            keypressTimestamps = keypressTimestamps.filter(t => now - t <= 1000);
+            kps = keypressTimestamps.length;
+
+            // Smooth Heat Decay when stopped or slow
+            const decayRate = 12.0 + (heat * 0.08); // Slightly faster decay at extreme heat
+            heat = Math.max(0, heat - decayRate * dt);
+
+            // 2. High Heat Auto-Popping Mechanism
+            if (heat >= 65) {
+                // Auto pop frequency scales exponentially with heat above 65
+                const popInterval = Math.max(0.012, 0.22 - ((heat - 65) / 35) * 0.208); // down to ~12ms at 100 heat
+                autoPopTimer += dt;
+                
+                while (autoPopTimer >= popInterval) {
+                    autoPopTimer -= popInterval;
+                    // Auto-pop multiple kernels per tick at high heat
+                    const autoPops = heat > 85 ? Math.floor(1 + Math.random() * 2) : 1;
+                    triggerPop(autoPops);
+                }
+            } else {
+                autoPopTimer = 0;
+            }
+
+            // Update sizzle sound volume
+            updateSizzleAudio(heat);
+
+            // 3. Render Pan Background & Base
+            const pan = getPanBounds();
+            drawPan(ctx, pan, heat);
+
+            // 4. Render Raw Unpopped Kernels in Pan
+            for (let raw of rawKernels) {
+                raw.draw(ctx, heat);
+            }
+
+            // 5. Steam Particles at Hot Heat
+            if (heat > 40 && Math.random() < (heat / 100) * 0.6) {
+                steamParticles.push(new SteamParticle(pan));
+            }
+            steamParticles = steamParticles.filter(s => {
+                const alive = s.update();
+                if (alive) s.draw(ctx);
+                return alive;
+            });
+
+            // 6. Update & Render Flying Popcorn Particles
+            particles = particles.filter(p => {
+                const alive = p.update();
+                if (alive) p.draw(ctx);
+                return alive;
+            });
+
+            // 7. Render Key Ripple FX
+            keyRippleEffects = keyRippleEffects.filter(r => {
+                const alive = r.update();
+                if (alive) r.draw(ctx);
+                return alive;
+            });
+
+            // 8. Update HUD Metrics
+            document.getElementById('statPopped').textContent = totalPopped.toLocaleString();
+            document.getElementById('statKps').textContent = (kps).toFixed(1);
+            
+            const heatBar = document.getElementById('heatBar');
+            const heatValue = document.getElementById('heatValue');
+            const statStatus = document.getElementById('statStatus');
+
+            heatBar.style.width = `${heat.toFixed(1)}%`;
+            heatValue.textContent = `${Math.round(heat)}%`;
+
+            // Temperature status text & colors
+            if (heat < 15) {
+                statStatus.textContent = "Cold";
+                statStatus.className = "mono text-sm font-semibold text-neutral-400";
+            } else if (heat < 40) {
+                statStatus.textContent = "Warming";
+                statStatus.className = "mono text-sm font-semibold text-amber-400";
+            } else if (heat < 70) {
+                statStatus.textContent = "Popping!";
+                statStatus.className = "mono text-sm font-semibold text-orange-400";
+            } else if (heat < 90) {
+                statStatus.textContent = "Sizzle Fire!";
+                statStatus.className = "mono text-sm font-semibold text-red-400 animate-pulse";
+            } else {
+                statStatus.textContent = "MAX HEAT 🔥";
+                statStatus.className = "mono text-sm font-bold text-yellow-300 animate-bounce";
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Start Loop on Window Load
+        window.onload = function() {
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
